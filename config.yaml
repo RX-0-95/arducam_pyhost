@@ -1,0 +1,16 @@
+IMAGE:
+  FORMAT: "JPEG"
+  START_CODE: 
+    - "ff"
+    - "da"
+  END_CODE: 
+    - "ff"
+    - "d9"
+
+DATA_TRANSFER:
+  TYPE: 'USART'
+  BAUD: 921600
+  PORT: 'COM5'
+  STOPBITS: 1 
+  PARITY: 'N'
+
