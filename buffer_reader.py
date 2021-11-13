@@ -67,14 +67,15 @@ class BufferReader:
         prev_buf = ''
         while True:
             cur_buf = self.buffer_provider.read(1)
-            if prev_buf == b'\xff' and cur_buf == b'\xd9':
-                self.buf.append(cur_buf)
-                self.plot_image_from_buffer()
-                self.buf.clear()
-                self.buffer_provider.flush()
-            else:
-                self.buf.append(cur_buf)
-            prev_buf = cur_buf
+            if cur_buf:
+                if prev_buf == b'\xff' and cur_buf == b'\xd9':
+                    self.buf.append(cur_buf)
+                    self.plot_image_from_buffer()
+                    self.buf.clear()
+                    self.buffer_provider.flush()
+                else:
+                    self.buf.append(cur_buf)
+                prev_buf = cur_buf
 
     def plot_image_from_buffer(self):
         buf = b''.join(self.buf)
