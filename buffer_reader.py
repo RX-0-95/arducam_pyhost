@@ -7,11 +7,15 @@ from os import getlogin
 from typing import Dict, List, overload
 import abc
 from PIL import Image
+from PyQt5 import QtCore as qtc
+import numpy as np
+from numpy.lib.function_base import copy
 import config_yaml
 import serial
 
 import sys
 import glob
+import typing
 
 class BufferProvider(abc.ABC):
     def __init__(self,word_size:int=8) -> None:
@@ -23,6 +27,12 @@ class BufferProvider(abc.ABC):
         """
         pass 
     @abc.abstractmethod
+    def is_open(self):
+        """return true if the port
+            is connect
+        """
+        return False
+    @abc.abstractmethod
     def close(self):
         """close the port
         """
@@ -30,6 +40,9 @@ class BufferProvider(abc.ABC):
     @abc.abstractmethod
     def read(self,num:int):
         pass
+    @abc.abstractmethod
+    def cancel_read(self):
+        pass 
     @abc.abstractmethod
     def set_port(self,port:str):
         pass
@@ -92,11 +105,14 @@ class SerialBufferProvider(BufferProvider):
         return self.ser.port
     def open(self):
         if self.ser.isOpen():
-           return
+            print('===> Port {} already open'.format(self.ser.port))
+            return
         self.ser.open()
+        print('===> Open port: {}'.format(self.ser.port))
         assert self.ser.is_open, \
             "Fail to open serial port {}".format(self.ser.port)
-    
+    def is_open(self):
+        return self.ser.isOpen()
     def close(self):
         if self.ser.isOpen():
             self.ser.close()
@@ -110,6 +126,9 @@ class SerialBufferProvider(BufferProvider):
     def read(self,num: int):
         return self.ser.read(num)
     
+    def cancel_read(self):
+        return self.ser.cancel_read()
+    
     def readline(self):
         return self.ser.readline()
     
@@ -119,7 +138,7 @@ class SerialBufferProvider(BufferProvider):
     
         
 
-class BufferReader:
+class BufferReader_v1:
     def __init__(self,buffer_provider:BufferProvider,
                 start_code:List[int],end_code:List[int]) -> None:
         self.buffer_provider = buffer_provider
@@ -136,6 +155,7 @@ class BufferReader:
             if cur_buf:
                 if prev_buf == b'\xff' and cur_buf == b'\xd9':
                     self.buf.append(cur_buf)
+                    print('===>Plot buffer')
                     self.plot_image_from_buffer()
                     self.buf.clear()
                     self.buffer_provider.flush()
@@ -149,6 +169,50 @@ class BufferReader:
         picture = Image.open(io.BytesIO(buf))
         picture.show()
 
+class BufferReader(qtc.QThread):
+    buffer_read_sgn = qtc.pyqtSignal(bytes)
+    def __init__(self,buffer_provider:BufferProvider,
+                start_code:List[int],end_code:List[int]) -> None:
+        super().__init__()
+        self.buffer_provider = buffer_provider
+        self.is_running = False
+        self.start_code = start_code
+        self.end_code = end_code
+        self.buf = []
+        self.send_buf = b''
+        
+    def run(self):
+        # start the buffer provider 
+        self.buffer_provider.open()
+        prev_buf = ''
+        while self.is_running:
+            cur_buf = self.buffer_provider.read(1)
+            if cur_buf:
+                if prev_buf == b'\xff' and cur_buf == b'\xd9':
+                    self.buf.append(cur_buf)
+                    self.send_buf = b''.join(self.buf)
+                    self.buffer_read_sgn.emit(self.send_buf)
+                    self.buf.clear()
+                    self.buffer_provider.flush()
+                else:
+                    self.buf.append(cur_buf)
+                prev_buf = cur_buf
+        
+        print('===>Close buffer provider')
+        self.buffer_provider.flush()
+        self.buffer_provider.close()
+        #self.buffer_provider.cancel_read()
+        #
+
+    #TODO: close the buffer provide when stop the thread
+    def set_running(self,b:bool):
+        self.is_running = b
+
+    def plot_image_from_buffer(self):
+        buf = b''.join(self.buf)
+        print(buf)
+        picture = Image.open(io.BytesIO(buf))
+        picture.show()
 
 if __name__ == "__main__":
     config_file_path = 'config.yaml'
@@ -161,13 +225,14 @@ if __name__ == "__main__":
                             stopbits=data_tras_config['STOPBITS'],
                             parity=data_tras_config['PARITY']
                             )
-    #buffer_provider.open()
+    buffer_provider.open()
 
-    ports = buffer_provider.serial_ports()
-    print(ports)
-    """
-    buffer_reader = BufferReader(buffer_provider,
+
+    #ports = buffer_provider.serial_ports()
+    #print(ports)
+
+    buffer_reader = BufferReader_v1(buffer_provider,
                                 start_code=image_config['START_CODE'],
                                 end_code=image_config['END_CODE'])
     buffer_reader.start()
-    """
+    

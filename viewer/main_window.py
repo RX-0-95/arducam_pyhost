@@ -69,6 +69,15 @@ class MainWindow(qtw.QMainWindow):
         self.image_scene.update()
         self.image_view.setSceneRect(image.rect())
 
+    def update_frame_from_data(self,data):
+        qp = qtg.QPixmap()
+        qp.loadFromData(data)
+        qp = qp.scaledToWidth(self.image_view.width())
+        self.image_scene.clear()
+        self.image_scene.addPixmap(qp)
+        self.image_scene.update()
+        self.image_view.setSceneRect(qtc.QRectF(qp.rect()))
+
 if __name__ == "__main__":
     qtw.QApplication.setAttribute(qtc.Qt.AA_EnableHighDpiScaling)
     qtc.QCoreApplication.setAttribute(qtc.Qt.AA_UseHighDpiPixmaps)
