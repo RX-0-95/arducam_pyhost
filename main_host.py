@@ -9,7 +9,7 @@ from typing import Dict, List
 
 import serial
 
-from viewer import main_window
+from viewer import main_window 
 import buffer_reader as br
 from config_yaml import get_config
 
@@ -104,10 +104,16 @@ class HostWindow():
         None 
     
     #############This function will be move to anther thread############
-    def update_frame(self,data):
+    def update_frame(self,format,data):
         current_frame_data = data
-        self.main_window.update_frame_from_data(current_frame_data)
-        
+        if format == br.ImageFormat.GREY:
+            print("GREY \n")
+            self.main_window.update_frame_from_greyscale(current_frame_data)
+        elif format == br.ImageFormat.JPEG:
+            print("JPEG \n")
+            self.main_window.update_frame_from_jpeg(current_frame_data)
+        else:
+            raise NotImplementedError("Unsuppored data format!!!\n")
 
 if __name__ == "__main__":
     qtw.QApplication.setAttribute(qtc.Qt.AA_EnableHighDpiScaling)

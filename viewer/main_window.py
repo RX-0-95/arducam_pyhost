@@ -64,6 +64,7 @@ class MainWindow(qtw.QMainWindow):
                             data.shape[0],
                             data.shape[0],
                             qtg.QImage.Format_RGB32)
+                           
         self.image_scene.clear()
         self.image_scene.addPixmap(image)
         self.image_scene.update()
@@ -71,12 +72,34 @@ class MainWindow(qtw.QMainWindow):
 
     def update_frame_from_data(self,data):
         qp = qtg.QPixmap()
+        #print("Length of data: {}".format(len(data)))
+        #print(data)
         qp.loadFromData(data)
-        qp = qp.scaledToWidth(self.image_view.width())
+        #qp = qp.scaledToWidth(self.image_view.width())
         self.image_scene.clear()
         self.image_scene.addPixmap(qp)
         self.image_scene.update()
         self.image_view.setSceneRect(qtc.QRectF(qp.rect()))
+
+    def update_frame_from_jpeg(self,data):
+        qp = qtg.QPixmap()
+        qp.loadFromData(data)
+        self.update_frame_from_pixmap(qp)
+
+    def update_frame_from_greyscale(self,data):
+        data = np.frombuffer(data,dtype=np.int8)
+        data = data.reshape(96,96)
+        qimage = qtg.QImage(data,data.shape[0],data.shape[1],
+                        qtg.QImage.Format_Grayscale8)
+        qp = qtg.QPixmap(qimage)
+        self.update_frame_from_pixmap(qp)
+    
+    def update_frame_from_pixmap(self,pixmap:qtg.QPixmap):
+        self.image_scene.clear()
+        pixmap = pixmap.scaledToWidth(320)
+        self.image_scene.addPixmap(pixmap)
+        self.image_scene.update()
+        self.image_view.setSceneRect(qtc.QRectF(pixmap.rect()))
 
 if __name__ == "__main__":
     qtw.QApplication.setAttribute(qtc.Qt.AA_EnableHighDpiScaling)

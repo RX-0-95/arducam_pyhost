@@ -1,11 +1,22 @@
 IMAGE:
-  FORMAT: "JPEG"
+  #FORMAT: "JPEG"
+  #START_CODE: 
+  #  - "ff"
+  #  - "da"
+  #END_CODE: 
+  #  - "ff"
+  #  - "d9"
+
+  FORMAT: "GREY"
   START_CODE: 
-    - "ff"
-    - "da"
+    - "05"
+    - "AA"
   END_CODE: 
     - "ff"
     - "d9"
+
+
+  
 
 DATA_TRANSFER:
   TYPE: 'USART'
