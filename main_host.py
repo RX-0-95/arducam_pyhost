@@ -12,12 +12,16 @@ import serial
 from viewer import main_window 
 import buffer_reader as br
 from config_yaml import get_config
+import format_converter as fc
+
+from person_detection import person_detector
 
 class HostWindow():
     def __init__(self,config:Dict) -> None:
         self.config = config
         com_config = self.config['DATA_TRANSFER']
         image_config = self.config['IMAGE']
+        model_cfg = self.config['NEURAL_NETWORK']
         self.is_connected = False
         self.show_buffer_mode = False
         #init buffer provider
@@ -35,6 +39,7 @@ class HostWindow():
         
         #init buffer reader
         self.buffer_reader = br.BufferReader(self.buffer_provider,
+                                        image_format=br.GetFormat(image_config['FORMAT']),
                                         start_code=image_config['START_CODE'],
                                         end_code=image_config['END_CODE']) 
         #init main window UI
@@ -46,7 +51,15 @@ class HostWindow():
         #connect UI to function
         self.connect_ui_function()
 
+        #set up person detector
+        self.person_detector = person_detector(img_res=model_cfg['IMG_RES'],
+                                                model_cfg_path=model_cfg['MODEL_CFG_PATH'],
+                                                model_weight_path=model_cfg['MODLE_WEIGHT_PATH'],
+                                                classes_path=model_cfg['COCO_CLASSES'])        
+
         self.main_window.show()
+
+
 
     def connect_ui_function(self):
         #udpate ports combobox when click combobox
@@ -112,10 +125,17 @@ class HostWindow():
         elif format == br.ImageFormat.JPEG:
             print("JPEG \n")
             self.main_window.update_frame_from_jpeg(current_frame_data)
+        elif format == br.ImageFormat.YUV:
+            print("YUV\n")
+            rgb = fc.YUV422Buffer_to_RGB888_ndarray(current_frame_data,96,96)
+            rgb = self.person_detector.detect_and_draw_box(rgb)
+            self.main_window.update_from_ndarray(rgb)
+
         else:
             raise NotImplementedError("Unsuppored data format!!!\n")
 
 if __name__ == "__main__":
+
     qtw.QApplication.setAttribute(qtc.Qt.AA_EnableHighDpiScaling)
     qtc.QCoreApplication.setAttribute(qtc.Qt.AA_UseHighDpiPixmaps)
     app = qtw.QApplication(sys.argv)

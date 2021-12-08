@@ -94,6 +94,14 @@ class MainWindow(qtw.QMainWindow):
         qp = qtg.QPixmap(qimage)
         self.update_frame_from_pixmap(qp)
     
+    def update_from_ndarray(self,data):
+        data888 = np.require(data,np.uint8,'C')
+        qimage = qtg.QImage(data888,data888.shape[0],data888.shape[1],
+                            qtg.QImage.Format_RGB888)
+        qp = qtg.QPixmap(qimage)
+        self.update_frame_from_pixmap(qp)
+
+
     def update_frame_from_pixmap(self,pixmap:qtg.QPixmap):
         self.image_scene.clear()
         pixmap = pixmap.scaledToWidth(320)

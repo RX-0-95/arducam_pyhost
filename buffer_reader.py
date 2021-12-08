@@ -18,9 +18,20 @@ import glob
 import typing
 from enum import Enum
 
+
+
 class ImageFormat(Enum):
     JPEG = 1
     GREY = 2
+    YUV = 3
+def GetFormat(format:str):
+    if format == 'JPEG':
+        return ImageFormat.JPEG
+    if format == 'GREY':
+        return ImageFormat.GREY
+    if format == 'YUV':
+        return ImageFormat.YUV
+    raise NotImplementedError("Not support image format {}".format(format))
 
 class BufferProvider(abc.ABC):
     def __init__(self,word_size:int=8) -> None:
@@ -178,15 +189,17 @@ class BufferReader_v1:
 class BufferReader(qtc.QThread):
     buffer_read_sgn = qtc.pyqtSignal(ImageFormat,bytes)
     buffer_format_sgn = qtc.pyqtSignal(str)
-    def __init__(self,buffer_provider:BufferProvider,
+    def __init__(self,buffer_provider:BufferProvider,image_format:ImageFormat,
                 start_code:List[int],end_code:List[int]) -> None:
         super().__init__()
         self.buffer_provider = buffer_provider
         self.is_running = False
+        self.image_format = image_format
         self.start_code = start_code
         self.end_code = end_code
         self.buf = []
         self.send_buf = b''
+        print("Create Buffer reader with format :{}".format(self.image_format))
         
     def run(self):
         # start the buffer provider 
@@ -196,28 +209,55 @@ class BufferReader(qtc.QThread):
             cur_buf = self.buffer_provider.read(1)
             if cur_buf:
                 #print(cur_buf)
-                if prev_buf == b'\xff' and cur_buf == b'\xd9': #detected end bytes JPEG
-                    self.buf.append(cur_buf)
-                    self.send_buf = b''.join(self.buf)
-                    self.buffer_read_sgn.emit(ImageFormat.JPEG,self.send_buf)
-                    self.buf.clear()
-                    self.buffer_provider.flush()
-                if prev_buf == b'\xff' and cur_buf == b'\xd8':#detected start bytes JPEG
-                    self.buf.clear()
-                    self.buf.append(b'\xff')
-                    self.buf.append(b'\xd8')
-                
-                if prev_buf == b'\x55' and cur_buf == b'\xAA': # detect start bytes GREY
-                    #print("Detect RGB!!!\n")
-                    grey_buf = self.buffer_provider.read(96*96*1)
-                    #self.send_buf = b''.join(grey_buf)
-                    self.send_buf = grey_buf
-                    self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
-                    self.buf.clear()
-                    #self.buffer_provider.flush()
-                
+                if self.image_format == ImageFormat.JPEG:
+                    if prev_buf == b'\xff' and cur_buf == b'\xd9': #detected end bytes JPEG
+                        self.buf.append(cur_buf)
+                        self.send_buf = b''.join(self.buf)
+                        self.buffer_read_sgn.emit(ImageFormat.JPEG,self.send_buf)
+                        self.buf.clear()
+                        self.buffer_provider.flush()
+                    if prev_buf == b'\xff' and cur_buf == b'\xd8':#detected start bytes JPEG
+                        self.buf.clear()
+                        self.buf.append(b'\xff')
+                        self.buf.append(b'\xd8')
+                    else:
+                        self.buf.append(cur_buf)
+                elif self.image_format == ImageFormat.GREY:
+                    if prev_buf == b'\x55' and cur_buf == b'\xAA': # detect start bytes GREY
+                        #print("Detect RGB!!!\n")
+                        grey_buf = self.buffer_provider.read(96*96*1)
+                        #self.send_buf = b''.join(grey_buf)
+                        self.send_buf = grey_buf
+                        self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
+                        self.buf.clear()
+                        #self.buffer_provider.flush()
+                elif self.image_format == ImageFormat.YUV:
+                    if prev_buf == b'\x55' and cur_buf == b'\xAF': #detect start bytes YUV
+                        print('===> Recieve YUV buffer\n')
+                        
+                        yuv_buf = self.buffer_provider.read(96*96*2)
+                        self.send_buf = yuv_buf
+                        ## test grey scale
+                        #print(yuv_buf)
+                        
+                        #grey_mask = np.arange(start=0,stop=96*96*2,step=2)
+                        #grey_buf = np.frombuffer(yuv_buf,dtype=np.uint8)[grey_mask]
+                        #self.send_buf = grey_buf.tobytes()
+                        #print(self.send_buf)
+                        #self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
+                        #self.send_buf = yuv_buf
+                        self.buffer_read_sgn.emit(ImageFormat.YUV,self.send_buf)
+                        
+                        """
+                        grey_buf = self.buffer_provider.read(96*96*1)
+                        #self.send_buf = b''.join(grey_buf)
+                        self.send_buf = grey_buf
+                        self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
+                        """
+                        self.buf.clear()
                 else:
-                    self.buf.append(cur_buf)
+                    raise NotImplementedError("Not support image format:{}".format(self.image_format))
+                    
                 prev_buf = cur_buf
         
         print('===>Close buffer provider')

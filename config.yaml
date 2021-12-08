@@ -6,17 +6,22 @@ IMAGE:
   #END_CODE: 
   #  - "ff"
   #  - "d9"
+  #FORMAT: "GREY"
+  #START_CODE: 
+  #  - "05"
+  #  - "AA"
+  #END_CODE: 
+  #  - "ff"
+  #  - "d9"
 
-  FORMAT: "GREY"
+  #FORMAT: "GREY"
+  FORMAT: "YUV"
   START_CODE: 
     - "05"
-    - "AA"
+    - "AF"
   END_CODE: 
     - "ff"
     - "d9"
-
-
-  
 
 DATA_TRANSFER:
   TYPE: 'USART'
@@ -24,4 +29,11 @@ DATA_TRANSFER:
   PORT: 'COM5'
   STOPBITS: 1 
   PARITY: 'N'
+
+NEURAL_NETWORK:
+  TYPE: 'YOLOV3'
+  IMG_RES: 128
+  MODLE_WEIGHT_PATH: neural_network/weights/yolov3.weights
+  MODEL_CFG_PATH: neural_network/config/yolov3.cfg
+  COCO_CLASSES: neural_network/data/coco.names
 
