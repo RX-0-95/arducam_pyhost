@@ -26,5 +26,5 @@ class person_detector:
     def detect_and_draw_box(self,img):
         box = self.detect(img)
         box = torch.tensor(box)
-        rt_img = detect.draw_output_image(img,box,self.classes)
-        return rt_img
+        rt_img,detect_person_flag = detect.draw_output_image(img,box,self.classes)
+        return rt_img,detect_person_flag

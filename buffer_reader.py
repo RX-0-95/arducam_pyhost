@@ -8,8 +8,10 @@ from typing import Dict, List, overload
 import abc
 #from PIL import Image
 from PyQt5 import QtCore as qtc
+from cv2 import CAP_GSTREAMER, calibrateCamera
 import numpy as np
 from numpy.lib.function_base import copy
+from torch.functional import cartesian_prod
 import config_yaml
 import serial
 
@@ -24,6 +26,21 @@ class ImageFormat(Enum):
     JPEG = 1
     GREY = 2
     YUV = 3
+
+class CamPriority(Enum):
+    P1 = 1
+    P2 = 2
+    P3 = 3
+
+CamPriorityCode= {
+    "p1":b"\x10",
+    "p2":b"\x20",
+    "p3":b"\x30",
+}
+
+
+
+
 def GetFormat(format:str):
     if format == 'JPEG':
         return ImageFormat.JPEG
@@ -153,42 +170,11 @@ class SerialBufferProvider(BufferProvider):
         self.ser.flushInput()
         self.ser.flushOutput()
     
-        
-"""
-class BufferReader_v1:
-    def __init__(self,buffer_provider:BufferProvider,
-                start_code:List[int],end_code:List[int]) -> None:
-        self.buffer_provider = buffer_provider
-        self.start_code = start_code
-        self.end_code = end_code
-        self.buf = []
-        
-    def start(self):
-        # start the buffer provider 
-        self.buffer_provider.open()
-        prev_buf = ''
-        while True:
-            cur_buf = self.buffer_provider.read(1)
-            if cur_buf:
-                if prev_buf == b'\xff' and cur_buf == b'\xd9':
-                    self.buf.append(cur_buf)
-                    print('===>Plot buffer')
-                    self.plot_image_from_buffer()
-                    self.buf.clear()
-                    self.buffer_provider.flush()
-                else:
-                    self.buf.append(cur_buf)
-                prev_buf = cur_buf
-
-    def plot_image_from_buffer(self):
-        buf = b''.join(self.buf)
-        print(buf)
-        picture = Image.open(io.BytesIO(buf))
-        picture.show()
-"""
 class BufferReader(qtc.QThread):
     buffer_read_sgn = qtc.pyqtSignal(ImageFormat,bytes)
-    buffer_format_sgn = qtc.pyqtSignal(str)
+    cam_priorty_sgn = qtc.pyqtSignal(CamPriority)
+    #buffer_format_sgn = qtc.pyqtSignal(str)
+    
     def __init__(self,buffer_provider:BufferProvider,image_format:ImageFormat,
                 start_code:List[int],end_code:List[int]) -> None:
         super().__init__()
@@ -205,10 +191,22 @@ class BufferReader(qtc.QThread):
         # start the buffer provider 
         self.buffer_provider.open()
         prev_buf = ''
+        in_recieve_img = False
         while self.is_running:
             cur_buf = self.buffer_provider.read(1)
             if cur_buf:
-                #print(cur_buf)
+                if not in_recieve_img:
+                    if prev_buf == b'\xaa' and cur_buf == b'\xff':
+                        priority = self.buffer_provider.read(1)
+                        if priority == CamPriorityCode["p1"]:
+                            self.cam_priorty_sgn.emit(CamPriority.P1)
+                        elif priority == CamPriorityCode["p2"]:
+                            print("===> Detect Motion\n")
+                            self.cam_priorty_sgn.emit(CamPriority.P2)
+                        elif priority == CamPriorityCode["p3"]:
+                            print('===> Person detected\n')
+                            self.cam_priorty_sgn.emit(CamPriority.P3)
+                # Extract image data from buffer
                 if self.image_format == ImageFormat.JPEG:
                     if prev_buf == b'\xff' and cur_buf == b'\xd9': #detected end bytes JPEG
                         self.buf.append(cur_buf)
@@ -233,27 +231,10 @@ class BufferReader(qtc.QThread):
                         #self.buffer_provider.flush()
                 elif self.image_format == ImageFormat.YUV:
                     if prev_buf == b'\x55' and cur_buf == b'\xAF': #detect start bytes YUV
-                        print('===> Recieve YUV buffer\n')
-                        
+                        #print('===> Recieve YUV buffer\n')
                         yuv_buf = self.buffer_provider.read(96*96*2)
                         self.send_buf = yuv_buf
-                        ## test grey scale
-                        #print(yuv_buf)
-                        
-                        #grey_mask = np.arange(start=0,stop=96*96*2,step=2)
-                        #grey_buf = np.frombuffer(yuv_buf,dtype=np.uint8)[grey_mask]
-                        #self.send_buf = grey_buf.tobytes()
-                        #print(self.send_buf)
-                        #self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
-                        #self.send_buf = yuv_buf
                         self.buffer_read_sgn.emit(ImageFormat.YUV,self.send_buf)
-                        
-                        """
-                        grey_buf = self.buffer_provider.read(96*96*1)
-                        #self.send_buf = b''.join(grey_buf)
-                        self.send_buf = grey_buf
-                        self.buffer_read_sgn.emit(ImageFormat.GREY,self.send_buf)
-                        """
                         self.buf.clear()
                 else:
                     raise NotImplementedError("Not support image format:{}".format(self.image_format))
@@ -264,8 +245,6 @@ class BufferReader(qtc.QThread):
         self.buffer_provider.flush()
         self.buffer_provider.close()
         #self.buffer_provider.cancel_read()
-        #
-
     #TODO: close the buffer provide when stop the thread
     def set_running(self,b:bool):
         self.is_running = b
@@ -277,27 +256,4 @@ class BufferReader(qtc.QThread):
         picture.show()
     """
 if __name__ == "__main__":
-    """
-    config_file_path = 'config.yaml'
-    config = config_yaml.get_config(config_file_path)
-    data_tras_config = config['DATA_TRANSFER']
-    image_config = config['IMAGE']
-    buffer_provider = SerialBufferProvider(
-                            port=data_tras_config['PORT'],
-                            baudrate=data_tras_config['BAUD'],
-                            stopbits=data_tras_config['STOPBITS'],
-                            parity=data_tras_config['PARITY']
-                            )
-    buffer_provider.open()
-
-
-    #ports = buffer_provider.serial_ports()
-    #print(ports)
-
-    buffer_reader = BufferReader_v1(buffer_provider,
-                                start_code=image_config['START_CODE'],
-                                end_code=image_config['END_CODE'])
-    buffer_reader.start()
-    """
-
     print(type(ImageFormat.GREY))

@@ -4,8 +4,6 @@ from __future__ import division
 
 import os
 import argparse
-import PIL
-from torch._C import dtype
 import tqdm
 import random
 import numpy as np
@@ -253,15 +251,17 @@ def draw_output_image(image, detections, classes):
     # Create plot
     
     #img = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
+    detect_person_flag = False
     img = image
     for x1, y1, x2, y2, conf, cls_pred in detections:
         print(f"\t+ Label: {classes[int(cls_pred)]} | Confidence: {conf.item():0.4f}")
         if classes[int(cls_pred)] == "person":
+            detect_person_flag = True
             cv2.rectangle(img,(x1,y1),(x2,y2),(0,255,0),1)
         
  
     #img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
-    return np.asarray(img,dtype=np.uint8)
+    return np.asarray(img,dtype=np.uint8),detect_person_flag
 
     
            

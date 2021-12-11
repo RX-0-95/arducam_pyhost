@@ -1,4 +1,5 @@
-from os import error
+import os
+from time import time 
 from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtCore as qtc
 from PyQt5.QtGui import QPixmap
@@ -55,7 +56,20 @@ class HostWindow():
         self.person_detector = person_detector(img_res=model_cfg['IMG_RES'],
                                                 model_cfg_path=model_cfg['MODEL_CFG_PATH'],
                                                 model_weight_path=model_cfg['MODLE_WEIGHT_PATH'],
-                                                classes_path=model_cfg['COCO_CLASSES'])        
+                                                classes_path=model_cfg['COCO_CLASSES']) 
+
+        #setup performance mointer
+        self.output_dir = 'output'
+        self.cam_out_file = os.path.join(self.output_dir,"cam.txt")
+        self.host_out_file = os.path.join(self.output_dir,"host.txt")
+        self.fps_out_file = os.path.join(self.output_dir,"fps.txt")
+
+        self.prev_frame_time = 0
+        #self.fps_file = open(self.fps_out_file,'a+')
+        self.cam_result = []
+        self.host_result = []
+        self.time_diff_threshold = 25 #25 ms 
+               
 
         self.main_window.show()
 
@@ -66,6 +80,8 @@ class HostWindow():
         self.main_window.com_box.before_popup.connect(self.update_com_list)
         # connect button\
         self.main_window.com_connect_btn.clicked.connect(self.on_connect_click)
+
+        
    
     def update_com_list(self):
         """refreshs the combobox for avaliable communcation ports
@@ -86,6 +102,8 @@ class HostWindow():
             self.main_window.com_connect_btn.setText('Disconnect')
             # connect the update frame to buffer reader
             self.buffer_reader.buffer_read_sgn.connect(self.update_frame)
+            self.buffer_reader.cam_priorty_sgn.connect(self.record_cam_result)
+
             print('===>Connect update frame function to buffer reader')
             print('===>Start buffer reader run')
             self.buffer_reader.set_running(True)
@@ -118,21 +136,54 @@ class HostWindow():
     
     #############This function will be move to anther thread############
     def update_frame(self,format,data):
+        # compute fps 
+        
+        if self.prev_frame_time == 0:
+            self.prev_frame_time = time()
+        else:
+            f = open(self.fps_out_file,"a+")
+            refresh_time = time() - self.prev_frame_time
+            self.prev_frame_time = time()
+            fps = 1/refresh_time
+            f.write("{}\n".format(fps))
+            f.close()
+        
         current_frame_data = data
         if format == br.ImageFormat.GREY:
-            print("GREY \n")
+            #print("GREY \n")
             self.main_window.update_frame_from_greyscale(current_frame_data)
         elif format == br.ImageFormat.JPEG:
-            print("JPEG \n")
+            #print("JPEG \n")
             self.main_window.update_frame_from_jpeg(current_frame_data)
         elif format == br.ImageFormat.YUV:
-            print("YUV\n")
+            #print("YUV\n")
             rgb = fc.YUV422Buffer_to_RGB888_ndarray(current_frame_data,96,96)
-            rgb = self.person_detector.detect_and_draw_box(rgb)
+            rgb,detec_person_flag = self.person_detector.detect_and_draw_box(rgb)
+            if detec_person_flag:
+                self.record_host_result()
             self.main_window.update_from_ndarray(rgb)
-
         else:
             raise NotImplementedError("Unsuppored data format!!!\n")
+
+    def record_cam_result(self,priority):
+        cam_file = open(self.cam_out_file,'a+')
+        if priority == br.CamPriority.P1:
+            p= 1
+        elif priority == br.CamPriority.P2:
+            p = 2
+        elif priority == br.CamPriority.P3:
+            p = 3
+        else:
+            raise NotImplementedError
+        cam_file.write("{:3f} {}\n".format(time()*1000,p))
+        cam_file.close()
+
+    def record_host_result(self):
+        host_file = open(self.host_out_file,'a+')
+        host_file.write("{:3f} {}\n".format(time()*1000, 1))
+        host_file.close()
+    
+
 
 if __name__ == "__main__":
 
