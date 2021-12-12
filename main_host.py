@@ -9,6 +9,7 @@ import sys
 from typing import Dict, List
 
 import serial
+from dynamic_priority import DynamicPriorityScheduler, DynamicTask
 
 from viewer import main_window 
 import buffer_reader as br
@@ -69,7 +70,11 @@ class HostWindow():
         self.cam_result = []
         self.host_result = []
         self.time_diff_threshold = 25 #25 ms 
-               
+
+        # dynamic queue system
+        self.priority_scheduler = DynamicPriorityScheduler()
+        self.cam_task1 = DynamicTask(max_priority=3,max_queue=20)
+        self.priority_scheduler.add_task(self.cam_task1)
 
         self.main_window.show()
 
@@ -158,23 +163,33 @@ class HostWindow():
         elif format == br.ImageFormat.YUV:
             #print("YUV\n")
             rgb = fc.YUV422Buffer_to_RGB888_ndarray(current_frame_data,96,96)
-            rgb,detec_person_flag = self.person_detector.detect_and_draw_box(rgb)
-            if detec_person_flag:
-                self.record_host_result()
-            self.main_window.update_from_ndarray(rgb)
+            self.cam_task1.insert_data(rgb)
+            # get the priority task from the task scheduler
+            priority_task = self.priority_scheduler.get_highest_priority()
+            if priority_task is not None:
+                p_rgb = priority_task.get_data()
+                p_rgb,detec_person_flag = self.person_detector.detect_and_draw_box(rgb)
+                if detec_person_flag:
+                    # detect person keep the priority
+                    self.record_host_result()
+                else:
+                    # no person, decrease priority
+                    priority_task.set_priority(1)
+                self.main_window.update_from_ndarray(rgb)
         else:
             raise NotImplementedError("Unsuppored data format!!!\n")
 
     def record_cam_result(self,priority):
         cam_file = open(self.cam_out_file,'a+')
         if priority == br.CamPriority.P1:
-            p= 1
+            p = 1
         elif priority == br.CamPriority.P2:
             p = 2
         elif priority == br.CamPriority.P3:
             p = 3
         else:
             raise NotImplementedError
+        self.cam_task1.cam_set_priority(p)
         cam_file.write("{:3f} {}\n".format(time()*1000,p))
         cam_file.close()
 
